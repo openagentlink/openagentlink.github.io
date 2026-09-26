@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open Agent Link</title>
+<meta name="description" content="An open protocol for reaching coding agents from anywhere: your phone, your apps, other agents.">
+<style>
+:root{--bg:#fbfaf7;--fg:#1c1b19;--muted:#5d5a54;--line:#e4e0d8;--card:#fff;--accent:#2f5bd3;--code:#f2efe8}
+@media (prefers-color-scheme:dark){:root{--bg:#141413;--fg:#ecebe6;--muted:#a3a098;--line:#2c2b28;--card:#1c1b19;--accent:#8aa8ff;--code:#22211e}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif}
+main{max-width:760px;margin:0 auto;padding:64px 16px 48px}
+h1{font-size:40px;line-height:1.15;margin:0 0 12px;letter-spacing:-.02em}
+h2{font-size:20px;margin:48px 0 12px}
+p{margin:0 0 16px}
+.lede{font-size:20px;color:var(--muted)}
+a{color:var(--accent)}
+.links{display:flex;flex-wrap:wrap;gap:12px;margin:28px 0 8px}
+.btn{display:inline-block;padding:10px 16px;border:1px solid var(--line);border-radius:8px;background:var(--card);text-decoration:none;color:var(--fg);font-weight:600}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+ul{padding-left:20px;margin:0 0 16px}
+li{margin:6px 0}
+code,pre{font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--code);border-radius:6px}
+code{padding:2px 5px}
+pre{padding:14px 16px;overflow-x:auto}
+.status{display:inline-block;font-size:13px;font-weight:600;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 10px;margin-bottom:20px}
+footer{max-width:760px;margin:0 auto;padding:24px 16px 48px;color:var(--muted);font-size:14px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<main>
+<span class="status">Version 0.1 · draft</span>
+<h1>Open Agent Link</h1>
+<p class="lede">An open protocol for reaching a coding agent on one computer from anywhere else: a phone, a web app, a script, or another agent.</p>
+<div class="links">
+<a class="btn primary" href="/spec/0.1/">Read the spec</a>
+<a class="btn" href="https://github.com/NeboLoop/nebo-link">Reference implementation</a>
+<a class="btn" href="https://github.com/openagentlink">GitHub</a>
+</div>
+
+<h2>What it is</h2>
+<p>The <a href="https://agentclientprotocol.com">Agent Client Protocol</a> (ACP) lets an editor drive a coding agent running on the same machine. Open Agent Link carries ACP unchanged over an authenticated WebSocket and adds what it takes once the client is somewhere else.</p>
+<ul>
+<li><strong>A host lists its agents.</strong> One computer can run several agents, each with its own folder and sign-in.</li>
+<li><strong>Pairing by one-time code.</strong> Each device gets its own key and can be removed on its own.</li>
+<li><strong>No open ports.</strong> Hosts dial out to a relay, or clients reach them on the local network.</li>
+<li><strong>Resumable turns.</strong> A client that reconnects mid-turn gets the running turn and any waiting permission question.</li>
+<li><strong>Permission questions reach every device.</strong> The first answer wins.</li>
+<li><strong>Per-turn usage, plain errors and version ranges.</strong></li>
+</ul>
+<p>Any ACP agent works, including Claude Code, Codex, Gemini CLI and OpenCode.</p>
+
+<h2>Conformance</h2>
+<p>Compatible means passing the conformance suite. It can test a host, or act as a host to test a client.</p>
+<pre>oal-conformance host wss://&lt;relay&gt;/oal/hosts/&lt;host&gt; --code ABCD-1234 --agent &lt;id&gt;
+oal-conformance client --listen 127.0.0.1:7878 --code K7QM-3XRD</pre>
+
+<h2>Resources</h2>
+<ul>
+<li><a href="/spec/0.1/">Specification 0.1</a></li>
+<li><a href="https://github.com/NeboLoop/nebo-link/tree/main/spec/schemas">JSON Schemas</a>, served at <code>https://openagent.link/schemas/0.1/</code></li>
+<li><a href="https://github.com/NeboLoop/nebo-link/tree/main/spec/examples">Annotated examples</a></li>
+<li><a href="https://github.com/NeboLoop/nebo-link/tree/main/spec/rfcs">Proposing a change</a></li>
+</ul>
+
+<h2>Status</h2>
+<p>0.1 is a draft. End-to-end encryption between client and host is specified and arrives in 0.2. It is required for 1.0.</p>
+</main>
+<footer>The specification is licensed CC-BY-4.0. Code is Apache-2.0.</footer>
+</body>
+</html>

@@ -1,0 +1,6 @@
+title: Open Agent Link
+description: An open protocol for reaching coding agents from anywhere.
+theme: jekyll-theme-primer
+markdown: kramdown
+kramdown:
+  input: GFM

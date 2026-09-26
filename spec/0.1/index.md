@@ -38,7 +38,7 @@ Open Agent Link lets a client drive agents on another computer. The client can b
 | Resuming after a reconnect | 12 |
 | Files by reference | 14 |
 | Error model | 15 |
-| End-to-end encryption (shape only; required for 1.0) | 17 |
+| End-to-end encryption and pairing through an untrusted relay (specified for 0.2; required for 1.0) | 17 |
 
 ### 1.1 Conventions
 
@@ -112,7 +112,7 @@ Rules:
 
 - The schema is `schemas/frame.schema.json`.
 - Every (connection, channel) pair has its own JSON-RPC id space in each direction. The host maps ids between a client's channel and the agent process. A client never sees the ids the host uses with the agent process.
-- Frames on one channel are delivered in the order they were sent. OAL does not define an order between frames on different channels. For example, a `host/turn` notification can arrive before or after the `session/update` it relates to.
+- Frames on one channel are delivered in the order they were sent. OAL defines one order across channels: `host/turn` with `state: "ended"` comes after the turn's last `session/update` (a replayed one included) and after the `session/prompt` response (section 9). Otherwise frames on different channels have no defined order. For example, `host/turn` `running` can arrive before or after the first `session/update` of the turn.
 - A frame naming an unknown agent gets the error `unknown_agent` (section 15) if it is a request. Otherwise it is dropped.
 - Anything else malformed gets JSON-RPC `-32600` if an id can be read. Otherwise it is dropped.
 
@@ -145,11 +145,12 @@ A relay MUST:
 - pass WebSocket messages both ways, in order and unchanged, text and binary;
 - close the other side when either side closes, passing the close code on;
 - answer an upgrade for a host that is not connected with HTTP 503 and the JSON body `{"code":"host_offline","message":"<host name> is offline."}`;
+- answer a pairing upgrade for a nameplate no host has registered with HTTP 404 and `{"code":"unknown_nameplate","message":"That code didn't work. Get a new one on the computer."}`, and one whose path carries more than four code characters with HTTP 400 and `{"code":"bad_nameplate", …}`, without routing it;
 - work without reading frame contents, so that end-to-end encryption can be added (section 17).
 
 A relay MAY authenticate the client (for example with a bearer token for an account) before the upgrade. It MAY stamp the stream with the identity it verified, so the host can accept `{"type":"relay"}` authentication (section 5).
 
-A relay endpoint for pairing is `wss://<relay>/oal/pair/<code>`. The relay routes it to the host that registered that code (section 6.2).
+A relay endpoint for pairing is `wss://<relay>/oal/pair/<nameplate>`, where the nameplate is the first four characters of the code. The relay routes it to the host that registered that nameplate (section 6.2). The rest of the code never goes to the relay outside the pairing connection itself.
 
 ### 4.5 LAN direct path
 
@@ -194,7 +195,7 @@ Params: `protocol` and `client` as in `host/hello`, plus:
 
 | Field | Type | Meaning |
 |---|---|---|
-| `code` | string | The code shown by the host or issued by the relay. Case-insensitive; hyphens and spaces are ignored. |
+| `code` | string | The code shown to the owner (section 6.2). Case-insensitive; hyphens and spaces are ignored; `I` and `L` read as `1`, `O` as `0`. |
 | `device.name` | string | What the owner calls this device ("Alma's phone"). |
 | `device.publicKey` | string | The device's X25519 static public key, 32 bytes, base64url without padding. |
 
@@ -202,12 +203,16 @@ Result: as `host/hello`, except that `device` also carries `token`, the device's
 
 The device stores `device.id`, `device.token` and the host's `info.host.publicKey`. In 0.1 the public keys are exchanged and stored, and nothing is encrypted with them yet. They are the static keys the end-to-end handshake uses (section 17), so an 0.1 pairing will not need to be redone.
 
+In 0.2, `host/pair` is unchanged but travels inside an encrypted pairing connection that is bound to the code, and each side checks that the key the other names in `host/pair` is the key that connection authenticated (section 17.5).
+
 ### 6.2 Codes
 
-- A code is 8 characters from the Crockford base32 alphabet (40 bits). It is shown as `XXXX-XXXX`.
-- A host issues codes when the owner asks for one (for example `nebo-link pair`). A relay may issue codes on the host's behalf. A relay-issued code is registered with the relay, so `wss://<relay>/oal/pair/<code>` reaches the right host.
+- A code is 8 characters from the Crockford base32 alphabet (40 bits). It is shown as `XXXX-XXXX`. The first four characters are the **nameplate**; the last four are the **secret**.
+- The relay routes a pairing by the nameplate alone (section 4.4). The secret never goes to the relay: not in a URL, a header or a relay API. In 0.2 the whole code is the password of the pairing key exchange (section 17.5), so a relay that knows only the nameplate cannot pair in the middle.
+- A host issues codes when the owner asks for one (for example `nebo-link pair`). A relay MAY issue the nameplate on the host's behalf. The nameplate is registered with the relay for the host, so `wss://<relay>/oal/pair/<nameplate>` reaches the right host.
+- The device that shows the code makes the secret, from a cryptographic random source. That is the host, or a client that shows a code for the owner to type on the host (the host then registers the nameplate, and the client connects once the code is entered). A relay never makes or shows the secret: a code shown on a relay's own page gives no protection against that relay.
 - A code MUST be single-use and MUST expire within 10 minutes.
-- A host MUST compare codes in constant time.
+- A host MUST compare codes (all eight characters) in constant time.
 - A host MUST allow at most one `host/pair` attempt per connection. A wrong code closes the connection with 4001.
 - A host MUST accept no more than 10 failed attempts per minute across all connections. Once a code has had 5 failed attempts, the host MUST stop accepting it.
 - On failure the host answers `pairing_refused` with a plain message ("That code didn't work. Get a new one on the computer.").
@@ -253,7 +258,7 @@ Agent:
 | `id` | Stable id, unique on the host. Lowercase letters, digits and hyphens, at most 63 characters. It is the `agent` of the agent channel. |
 | `label` | What the owner calls the agent ("app"). |
 | `runtime` | A `runtimes[].id` from `host/info` ("claude-code", "codex", "openclaw"). |
-| `folder` | Absolute path of the folder its sessions work in, on the host. Absent for runtimes without one. |
+| `folder` | Absolute path of the folder its sessions work in, on the host. Absent for agents without one (OpenClaw and Hermes agents, for example). For such an agent the client sends `cwd: "/"` in ACP requests that require a `cwd`, and the host ignores `cwd`. |
 | `online` | True while the agent can take a prompt now, or will be started on first use. |
 | `offlineReason` | When `online` is false, one plain sentence saying why and what to do ("Claude Code isn't signed in on this computer. Run `claude` once to sign in."). |
 | `capabilities` | The agent's `acp:AgentCapabilities`, as its last `initialize` answered. For an adapted runtime, as the adapter provides them. |
@@ -275,11 +280,11 @@ The host is the only ACP client of each agent process. Toward clients it behaves
 |---|---|
 | `initialize` (client to host) | The first request on each agent channel. The host answers it itself with the agent's `acp:InitializeResponse`: `protocolVersion` per ACP negotiation, the agent's `agentCapabilities` and `agentInfo`, and `authMethods: []`. The client's `clientCapabilities` are not passed to the agent. The host initializes the agent process with `fs.readTextFile`, `fs.writeTextFile` and `terminal` false and no `elicitation`. The agent then uses its own tools on its own computer, and never sends `fs/*`, `terminal/*` or `elicitation/*`. |
 | `authenticate`, `logout` | Refused with `not_permitted` ("Sign in to Claude Code on the computer itself."). The agent runs under its owner's own sign-in on the host. |
-| `session/new` | Forwarded. `cwd` MUST be the agent's `folder` or inside it, or the host answers `not_permitted`. The host MUST NOT pass `stdio` MCP servers from a client, because they are commands that would run on the host. It MAY pass `http` and `sse` servers, and 0.1 hosts pass none. On success the caller is attached. |
-| `session/load` | If the session is open in the agent process, the host answers from its record. It sends the record to the caller as `session/update` notifications. Then, if a turn is running, it sends `host/turn` with `state: "running"`. Then it answers with the session's current `modes` and `configOptions`. Then it sends every pending permission request of the session as a new `session/request_permission` on this channel. If the session is not open, the host forwards the request to the agent (same `cwd` and MCP rules as `session/new`). It delivers the agent's replay to the caller only, and records it. The caller is attached. |
-| `session/resume` | As `session/load`, without sending the record. |
-| `session/list` | Forwarded. If `cwd` is absent, the host sets it to the agent's `folder`. |
-| `session/prompt` | If a turn is running in the session, the host refuses with `turn_in_progress`. Otherwise it assigns a turn id and sends `host/turn` `running` to every attached connection. It records each prompt content block as a `user_message_chunk` update and sends those updates to every other attached connection, unless the agent itself echoes the prompt. Then it forwards the prompt (after resolving files, section 14). The agent's updates go to every attached connection. The agent's `acp:PromptResponse` goes to the caller if it is still connected, and `host/turn` `ended` goes to every attached connection. |
+| `session/new` | Forwarded. For an agent with a `folder`, `cwd` MUST be that folder or inside it, or the host answers `not_permitted`. For an agent without one, the client sends `"/"` and the host ignores `cwd`. The host MUST NOT pass `stdio` MCP servers from a client, because they are commands that would run on the host. It MAY pass `http` and `sse` servers, and 0.1 hosts pass none. On success the caller is attached. |
+| `session/load` | If the session is open in the agent process, the host answers from its record. It sends the record to the caller as `session/update` notifications. Then it sends the session's most recent `host/turn`: `running` if a turn is running, otherwise the `ended` notice of the last turn, if the session has had one. Then it answers with the session's current `modes` and `configOptions`. Then it sends every pending permission request of the session as a new `session/request_permission` on this channel. If the session is not open, the host forwards the request to the agent (same `cwd` and MCP rules as `session/new`). It delivers the agent's replay to the caller only, and records it. The caller is attached. |
+| `session/resume` | As `session/load`, without sending the record. The most recent `host/turn` and the pending permission requests are still sent. |
+| `session/list` | Forwarded. If `cwd` is absent, the host sets it to the agent's `folder`. For an agent without a folder the host ignores `cwd`. |
+| `session/prompt` | If a turn is running in the session, the host refuses with `turn_in_progress`. Otherwise it assigns a turn id and sends `host/turn` `running` to every attached connection. It records each prompt content block as a `user_message_chunk` update and sends those updates to every other attached connection, unless the agent itself echoes the prompt. Then it forwards the prompt (after resolving files, section 14). The agent's updates go to every attached connection. The agent's `acp:PromptResponse` goes to the caller if it is still connected. Then `host/turn` `ended` goes to every attached connection (section 9 fixes this order). |
 | `session/cancel` | Accepted from any attached connection and forwarded. The host answers the agent's pending permission requests in that session with `{"outcome":"cancelled"}`, as ACP requires of a client, and resolves them (section 10). |
 | `session/set_mode`, `session/set_config_option` | Forwarded. On success the host sends the resulting `current_mode_update` or `config_option_update` to every other attached connection, and updates its record. A host MAY refuse, with `not_permitted`, a remote change to a mode that lets the agent act without asking. Owners decide that on the host. |
 | `session/close`, `session/delete` | Forwarded. Every connection is detached from the session and the record is dropped. |
@@ -305,6 +310,10 @@ A turn is one `session/prompt`. `host/turn` (notification, host to client) tells
 | `error` | On `ended`, `{code, message}` when the turn ended with an error. |
 | `usage` | On `ended`, the tokens and cost of this turn, when the agent reports them. |
 
+**Order.** A host MUST send `host/turn` with `state: "ended"` only after every `session/update` of the turn, and, on the connection that sent the prompt, after the `session/prompt` response. A client can therefore treat `ended` as final: no update of that turn follows it. This is the only ordering guarantee between the host channel and agent channels.
+
+**On attach.** `session/load` and `session/resume` re-send the session's most recent `host/turn` after the replay (section 8), including an `ended` notice for a turn that finished while the client was away.
+
 `usage` has ACP's `Usage` fields and meanings (`inputTokens`, `outputTokens`, `thoughtTokens`, `cachedReadTokens`, `cachedWriteTokens`, `totalTokens`), plus `cost: {amount, currency}`. It always covers this one turn. If an agent reports totals for the whole session, the host subtracts the previous turn's totals. ACP marks its prompt `usage` as unstable. OAL's `usage` is stable, and the host fills it from whatever the agent provides.
 
 ## 10. Permission requests
@@ -329,7 +338,7 @@ A request is answered by whichever comes first:
 Then the host:
 
 1. answers the agent with the `acp:RequestPermissionOutcome`;
-2. sends `$/cancel_request {requestId}` to every other connection that still has the request open. Those clients answer it with error `-32800`, as ACP requires;
+2. sends `$/cancel_request {requestId}` to every connection that holds a copy of the request, including the connection whose answer won. One rule for everyone keeps clients simple: a client closes its copy when it receives `$/cancel_request`, whether or not it answered. Clients answer it with error `-32800`, as ACP requires, and the host ignores those answers;
 3. sends `host/pending_update` `{change: "resolved", request, outcome, answeredBy}` to every authenticated connection. `answeredBy` is `{deviceId, name}`, or null when the answer came from the computer itself;
 4. treats any later answer as follows: a late response on an agent channel is ignored; a late `host/answer` gets `already_answered`, and an unknown id gets `unknown_request`.
 
@@ -354,9 +363,9 @@ To resume, the client:
 2. sends `initialize` on the agent channel;
 3. sends `session/load` for each session it shows.
 
-The host then sends, in this order on that channel: the session record (including the part of the running turn so far), `host/turn` `running` on the host channel if a turn is still running, the `session/load` response, and a `session/request_permission` for each pending request. The client continues from there. It receives the rest of the turn's updates and `host/turn` `ended`. The `PromptResponse` of a prompt sent on a closed connection is not delivered, because `host/turn` `ended` carries the same outcome.
+The host then sends, on the agent channel and in this order, the session record (including the part of the running turn so far), the `session/load` response, and a `session/request_permission` for each pending request. On the host channel, after the record, it sends the session's most recent `host/turn`. The most recent `host/turn` is `running` if a turn is still running. If the turn ended while the client was away, it is that turn's `ended` notice, with its `stopReason` or `error` and its `usage`. If the turn is still running, the client continues from there and receives the rest of the turn's updates and then `host/turn` `ended`. The `PromptResponse` of a prompt sent on a closed connection is not delivered, because `host/turn` `ended` carries the same outcome.
 
-Frames lost while the client was away are covered by the record. OAL 0.1 does not resend individual frames.
+Frames lost while the client was away are covered by the record. OAL 0.1 does not resend individual frames. `session/load` always sends the whole record, so a client that keeps its transcript across a reconnect receives updates it has already seen. Until a replay cursor arrives in 0.2 (section 18), clients MUST de-duplicate: the simplest way is to replace the session's transcript with the replay. A client that merges instead matches tool calls by `toolCallId` and treats a `host/turn` whose `turnId` it has already seen end as a repeat.
 
 ## 13. Versioning
 
@@ -415,7 +424,7 @@ OAL codes (schema `schemas/error.schema.json`):
 - **Permission modes.** A client can change a session's mode (`session/set_mode`). A host SHOULD let the owner refuse remote changes to modes that let the agent act without asking. It SHOULD label such modes plainly: "Runs anything on this computer without asking."
 - **Audit.** A host SHOULD keep a local log of who prompted, which device answered which permission request with which option, mode changes, pairings and unpairings. The log records device ids and never message content.
 - **Revocation.** `host/unpair`, or removing the device on the host, closes its connections (4003) and invalidates its token.
-- **Pairing codes** are short and single-use. The limits in section 6.2 make guessing a code impractical within its lifetime.
+- **Pairing codes** are short and single-use. The limits in section 6.2 make guessing a code impractical within its lifetime. In 0.1 the relay can read the code in `host/pair`; section 17.5 removes that.
 
 ## 17. End-to-end encryption (specified shape; to be implemented in 0.2; required for 1.0)
 
@@ -423,7 +432,7 @@ OAL 1.0 MUST encrypt every connection between client and host, so that a relay f
 
 ### 17.1 Keys
 
-Each device and each host has an X25519 static key pair. Public keys are exchanged at pairing (section 6.1) and stored by both sides. They rotate by pairing again (an RFC defines in-band rotation).
+Each device and each host has an X25519 static key pair. Public keys are exchanged at pairing (section 6.1) and stored by both sides. They rotate by pairing again (an RFC defines in-band rotation). A side that rotates MAY keep its previous key for a transition, answering and connecting with whichever key each peer holds until that peer has the new one.
 
 ### 17.2 Handshake
 
@@ -433,27 +442,77 @@ Each device and each host has an X25519 static key pair. Public keys are exchang
 - Message 2 (host to client, one binary message) is `<- e, ee, se`. Its payload is the JSON `{"protocol":"<selected>","device":{"id":…}}`.
 - The host authenticates the device by its static key, which must belong to a paired device. `host/hello` is not sent. The token is not used on encrypted connections.
 - A host that requires encryption closes a connection whose first message is text, with 4001.
+- A message 1 that no static key of the host opens, or whose static key is not a paired device, closes the connection with 4001. A revoked device's key is not a paired device.
+- Message 1 can be replayed by the relay, and its payload is not forward-secret. Its payload therefore carries version negotiation only. A replayed message 1 gets a message 2 that only the real device can read, so the host MUST NOT count the device as connected (presence, `lastSeenAt`) until the first transport message from it decrypts.
 
 ### 17.3 Framing after the handshake
 
-Every OAL frame is encrypted as one or more Noise transport messages, each in its own binary WebSocket message. A Noise message is at most 65535 bytes. The plaintext of each message starts with one byte: `0x01` means more parts follow, `0x00` means this is the last part of the frame. The receiver joins the parts and parses the frame. Each side rekeys (Noise `Rekey`) after 2^20 messages. A new connection always performs a new handshake.
+Every OAL frame is encrypted as one or more Noise transport messages, each in its own binary WebSocket message. A Noise message is at most 65535 bytes, so it carries at most 65518 bytes of the frame (less the 16-byte tag and the part byte). The plaintext of each message starts with one byte: `0x01` means more parts follow, `0x00` means this is the last part of the frame. The receiver joins the parts and parses the frame. `maxFrameBytes` (section 4.1) limits the joined frame.
+
+Each side rekeys its sending key (Noise `REKEY`) after every 2^20 transport messages it sends, and its receiving key after every 2^20 transport messages it receives. Handshake messages are not counted. A new connection always performs a new handshake.
+
+Transport messages use Noise's implicit counter as the nonce, so a message that is replayed, reordered, dropped or altered fails to decrypt. A message that fails to decrypt ends the connection with close 4001, and nothing after it is read. A part byte other than `0x00` or `0x01` ends it with close 1002.
 
 ### 17.4 What the relay still sees
 
-With encryption on, the relay still sees: which host each connection goes to (the host id in the path), the client's IP address, when connections open and close, and the size and timing of messages. With relay-issued identity, it also sees the account. It sees no agent ids, session ids, prompts, replies, tool calls, permission requests, or file names inside frames. A host that asks its relay to send a push notification sends a content-free notice ("An agent on Studio Mac needs your answer"), unless the owner chooses otherwise.
+With encryption on, the relay still sees: which host each connection goes to (the host id in the path), the client's IP address, when connections open and close, and the size and timing of messages. With relay-issued identity, it also sees the account. It sees no agent ids, session ids, prompts, replies, tool calls, permission requests, or file names inside frames. During pairing (section 17.5) it sees the nameplate, that a pairing happened, and the sizes and timing of its messages; it never sees the secret half of the code, either static key, the device's name, or the token. A host that asks its relay to send a push notification sends a content-free notice ("An agent on Studio Mac needs your answer"), unless the owner chooses otherwise.
 
-### 17.5 Open for 0.2
+### 17.5 Pairing through an untrusted relay (0.2)
 
-- **Pairing over an untrusted relay (open).** A 40-bit code that the relay routes must not let the relay insert its own keys. Pairing will bind the exchanged keys to the code with a PAKE (CPace or SPAKE2), or the client will confirm a short fingerprint of the host key on the host's screen. The choice is settled by RFC.
+In 0.1 the relay can read the code in `host/pair`, so it could pair in the middle and hold keys of its own. In 0.2 the pairing connection is encrypted and bound to the code with CPace, a password-authenticated key exchange (PAKE). The whole code is the password; the relay knows only the nameplate (section 6.2). A relay that tries to take part must guess the secret half: it gets one guess per attempt, a wrong guess makes that pairing fail, and no guess can be tested offline. With the limits in section 6.2 (5 failed attempts per code) its chance per code is at most 5 in 2^20, and every attempt shows as a failed pairing.
+
+Pairing does not ask the owner to compare fingerprints. Hosts are often servers with no screen.
+
+The pairing connection is `wss://<relay>/oal/pair/<nameplate>`, or the host's own `/oal` on the LAN. Every message below is one binary WebSocket message. The client sends first.
+
+| # | Direction | Message | Bytes |
+|---|---|---|---|
+| 1 | client → host | CPace `MSGa` = `0x20` ‖ `Ya` ‖ `0x00` | 34 |
+| 2 | host → client | CPace `MSGb` = `0x20` ‖ `Yb` ‖ `0x00` | 34 |
+| 3 | client → host | Noise message 1: `-> psk, e`, empty payload | 48 |
+| 4 | host → client | Noise message 2: `<- e, ee, s, es`, empty payload | 96 |
+| 5 | client → host | Noise message 3: `-> s, se`, empty payload | 64 |
+| 6 | client → host | `host/pair` request, as an encrypted frame (section 17.3) | |
+| 7 | host → client | `host/pair` result or error, as an encrypted frame | |
+
+**CPace** is as specified in draft-irtf-cfrg-cpace-21:
+
+- Cipher suite `CPACE-RISTR255-SHA512`, in the initiator-responder setting. The client is the initiator (A); the host is the responder (B).
+- `PRS`: the code's eight characters as ASCII, normalized as in section 6.1 (upper case, `I` and `L` read as `1`, `O` as `0`, no hyphen or spaces). For the code `K7QM-3XRD`, `PRS` is `K7QM3XRD`.
+- `CI`: the ASCII bytes `OAL-PAIR/1`. `sid`, `ADa` and `ADb`: empty.
+- `MSGa` = `lv_cat(Ya, ADa)` and `MSGb` = `lv_cat(Yb, ADb)`; with empty associated data these are the 34 bytes in the table. A message of any other length or shape, a `Y` that does not decode, or `K` equal to the identity ends the pairing (close 4001).
+- `ISK` is the draft's `ISK` over `transcript_ir(Ya, ADa, Yb, ADb)`. Implementations SHOULD check their CPace against the ristretto255 test vectors in the draft's appendix B.3.
+
+**Noise:**
+
+- Pattern `Noise_XXpsk0_25519_ChaChaPoly_BLAKE2s`. The client is the initiator. The static keys are each side's X25519 static key (section 17.1).
+- PSK: the first 32 bytes of SHA-512(`lv_cat("OAL-PAIR/1 psk", ISK)`).
+- Prologue: the ASCII bytes `OAL-PAIR/1`.
+- A wrong code gives the two sides different PSKs, so message 3 fails to decrypt at the host. The host counts a failed attempt against the code (section 6.2) and closes with 4001; the client sees the close. A relay that changes any of messages 1 to 5 causes the same failure.
+
+**`host/pair` inside the encrypted connection:**
+
+- After message 5 the connection uses the framing and rekeying of section 17.3. The client sends `host/pair` exactly as in section 6.1, `code` included.
+- The host MUST check that `device.publicKey` is the client static key it received in message 5, and otherwise answer `pairing_refused` and close with 4001.
+- The client MUST check that `info.host.publicKey` in the result is the host static key it received in message 4, and otherwise close with 4001 and keep nothing.
+- On success the connection stays open, authenticated as the new device, as in 0.1. Later connections use the handshake in section 17.2 with the keys pinned here. The host issues the token as in 0.1; encrypted connections do not use it.
+
+**Why this construction.** The code has 20 secret bits, so it is never used as a Noise PSK directly: a PSK that small could be tested offline from message 3. CPace turns the code into a key only its two holders share, and that key keys a standard Noise handshake, as the draft recommends (section 10.5 of the draft). Noise then confirms the key, proves that each side holds its static private key, and carries both static keys encrypted, so OAL adds no key-confirmation step of its own. Binding `host/pair`'s keys to the handshake keys makes the keys the host and device store the ones the code authenticated.
+
+The reference implementation is `crates/oal-secure` in nebo-link.
+
+### 17.6 Open for 0.2
+
 - **Files (open).** Files uploaded to a relay's file service are readable by that service. 0.2 will encrypt files on the client with a per-file key, and send the key inside the encrypted prompt.
 - **Relay identity with encryption (open).** Devices that authenticate only through the relay need a way to register a static key with the host.
+- **In-band key rotation (open).** A message that tells a peer a side's new static key over an encrypted connection (section 17.1).
 
 ## 18. Deferred to 0.2
 
 - End-to-end encryption and PAKE pairing (section 17).
 - Files produced by agents: a host method that publishes a file inside the agent's folder to a URL the client can fetch.
 - Sending to a running turn (steering, or queueing a message for after the turn), instead of `turn_in_progress`.
-- Replay from a cursor (`session/load` since the last update seen), so a reconnect doesn't resend the whole record.
+- Replay from a cursor (`session/load` since the last update seen), so a reconnect doesn't resend the whole record. Until then clients de-duplicate (section 12).
 - Owner-level agent management over OAL: adding and removing agents, and setting an agent's default mode.
 - ACP `elicitation` and client-side `fs`/`terminal` over OAL.
 - A defined interface between relay and host for push notifications.
@@ -547,3 +606,14 @@ Host channel, client to host (requests): `host/hello`, `host/pair`, `host/info`,
 Host channel, host to client (notifications): `host/agent_update`, `host/turn`, `host/pending_update`.
 
 Agent channels: ACP v1, unchanged. The host serves `initialize`, `session/new`, `session/load`, `session/resume`, `session/list`, `session/prompt`, `session/cancel`, `session/set_mode`, `session/set_config_option`, `session/close` and `session/delete`, and refuses `authenticate` and `logout`. It sends `session/update`, `session/request_permission` and `$/cancel_request`.
+
+## Changes
+
+- **0.1, amended 2026-09-26** (still a draft; implementation work on the client SDKs found these gaps):
+  - `session/load` and `session/resume` re-send the session's most recent `host/turn` after the replay, including the `ended` notice of a turn that finished while the client was away (sections 8, 9, 12).
+  - `host/turn` `ended` comes after the turn's last `session/update` and after the `session/prompt` response. This is the one ordering guarantee across channels (sections 4.2, 9).
+  - Clients de-duplicate replayed updates until the replay cursor in 0.2 (sections 12, 18).
+  - `$/cancel_request` goes to every connection holding a copy of a resolved permission request, including the one whose answer won (section 10).
+  - An agent without a folder has no `folder` in `host/agents`. The client sends `cwd: "/"` and the host ignores `cwd` for that agent (sections 7.2, 8).
+  - A pairing code is a four-character nameplate, by which the relay routes, and a four-character secret the relay never sees. A relay refuses an unknown nameplate (404 `unknown_nameplate`) and a pairing path that carries more than the nameplate (400 `bad_nameplate`). Pairing through an untrusted relay and end-to-end encryption are specified for 0.2 (sections 4.4, 6, 16, 17).
+- **0.1, 2026-09-26**: first draft.

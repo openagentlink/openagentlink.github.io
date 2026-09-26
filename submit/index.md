@@ -1,6 +1,6 @@
 ---
 layout: default
-title: List your implementation
+title: List yours
 ---
 
 # List your implementation

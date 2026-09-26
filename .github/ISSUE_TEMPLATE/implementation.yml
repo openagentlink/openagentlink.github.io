@@ -5,7 +5,7 @@ labels: [listing]
 body:
   - type: markdown
     attributes:
-      value: Listing requires a passing run of the conformance suite. See SUBMITTING.md.
+      value: Listing requires a passing run of the conformance suite. See https://openagent.link/submit/
   - type: input
     id: name
     attributes: {label: Project name}

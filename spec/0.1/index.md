@@ -1,6 +1,6 @@
 ---
 layout: default
-title: Open Agent Link 0.1
+title: Specification
 ---
 
 # Open Agent Link (OAL) 0.1
@@ -9,6 +9,13 @@ Status: draft. Version 0.1, 2026-09-26.
 Canonical home: https://openagent.link. Schemas: `https://openagent.link/schemas/0.1/`.
 Editors: NeboLoop. Reference implementation: Nebo Link (`crates/nebo-link` in https://github.com/NeboLoop/nebo-link).
 License of this text: CC-BY-4.0 (`spec/LICENSE`).
+
+
+## Contents
+{:.no_toc}
+
+* TOC
+{:toc}
 
 ## 1. Introduction
 

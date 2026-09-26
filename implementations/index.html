@@ -1,0 +1,27 @@
+---
+layout: default
+title: Implementations
+---
+<h1>Implementations</h1>
+<p>Projects listed here passed the conformance suite. <a href="/submit/">List yours</a>.</p>
+{% assign impls = site.data.implementations | sort %}
+{% if impls.size > 0 %}
+<div class="scroll"><table>
+<tr><th>Project</th><th>Role</th><th>Use case</th><th>Connection</th><th>Encrypted</th><th>Several devices</th><th>Passed</th></tr>
+{% for pair in impls %}{% assign i = pair[1] %}
+<tr><td><a href="{{ i.url }}">{{ i.name }}</a><br><small>{{ i.maintainer }} · {{ i.license }}</small></td><td>{{ i.role }}</td><td>{{ i.use_case }}</td><td>{{ i.connection | join: ", " }}</td><td>{% if i.e2e %}Yes{% else %}No{% endif %}</td><td>{% if i.multi_device %}Yes{% else %}No{% endif %}</td><td><a href="{{ i.conformance.report }}">{{ i.conformance.suite }}</a><br><small>{{ i.conformance.passed | date: "%Y-%m-%d" }}</small></td></tr>
+{% endfor %}
+</table></div>
+{% else %}
+<p class="empty">No project has been listed yet. The first ones are on their way through the suite. <a href="/submit/">Yours can be first</a>.</p>
+{% endif %}
+
+<h2>Agents</h2>
+<p>Any agent that speaks ACP works through any Open Agent Link host.</p>
+<div class="scroll"><table>
+<tr><th>Agent</th><th>How it speaks ACP</th></tr>
+<tr><td>Claude Code</td><td><code>@agentclientprotocol/claude-agent-acp</code></td></tr>
+<tr><td>Codex</td><td><code>@agentclientprotocol/codex-acp</code></td></tr>
+<tr><td>Gemini CLI</td><td><code>gemini --acp</code></td></tr>
+<tr><td>OpenCode</td><td><code>opencode acp</code></td></tr>
+</table></div>

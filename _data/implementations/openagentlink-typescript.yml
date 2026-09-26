@@ -1,0 +1,14 @@
+name: "@openagentlink/client (TypeScript)"
+url: https://github.com/NeboLoop/nebo-link/tree/main/sdk/typescript
+repo: https://github.com/NeboLoop/nebo-link
+maintainer: NeboLoop
+license: Apache-2.0
+role: sdk
+use_case: Drive coding agents from Node or the browser, with permission answers from your code.
+connection: [relay, lan]
+e2e: true
+multi_device: true
+conformance:
+  suite: "0.1"
+  passed: 2026-09-26
+  report: https://github.com/NeboLoop/nebo-link/actions/runs/36273410673

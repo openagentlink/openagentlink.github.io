@@ -1,0 +1,14 @@
+name: openagentlink (Python)
+url: https://github.com/NeboLoop/nebo-link/tree/main/sdk/python
+repo: https://github.com/NeboLoop/nebo-link
+maintainer: NeboLoop
+license: Apache-2.0
+role: sdk
+use_case: Drive coding agents from Python scripts and services, with typed async events.
+connection: [relay, lan]
+e2e: true
+multi_device: true
+conformance:
+  suite: "0.1"
+  passed: 2026-09-26
+  report: https://github.com/NeboLoop/nebo-link/actions/runs/36273410673

@@ -1,0 +1,42 @@
+name: List my implementation
+description: Ask for your host, client, relay or SDK to be listed on openagent.link. A pull request is faster; this form is for people who prefer not to open one.
+title: "List: <project name>"
+labels: [listing]
+body:
+  - type: markdown
+    attributes:
+      value: Listing requires a passing run of the conformance suite. See SUBMITTING.md.
+  - type: input
+    id: name
+    attributes: {label: Project name}
+    validations: {required: true}
+  - type: input
+    id: url
+    attributes: {label: Project URL}
+    validations: {required: true}
+  - type: dropdown
+    id: role
+    attributes: {label: Role, options: [host, client, relay, sdk]}
+    validations: {required: true}
+  - type: input
+    id: use_case
+    attributes: {label: Use case in one line}
+    validations: {required: true}
+  - type: checkboxes
+    id: connection
+    attributes:
+      label: Connection
+      options: [{label: Through a relay}, {label: On the local network}]
+  - type: checkboxes
+    id: features
+    attributes:
+      label: Features
+      options: [{label: End-to-end encryption}, {label: Several devices on one agent (first answer wins)}]
+  - type: input
+    id: license
+    attributes: {label: License}
+    validations: {required: true}
+  - type: input
+    id: report
+    attributes: {label: Link to the full conformance suite output, description: "A CI run or gist showing every example PASS and the suite version."}
+    validations: {required: true}

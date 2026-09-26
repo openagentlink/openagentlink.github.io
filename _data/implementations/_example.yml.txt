@@ -1,0 +1,15 @@
+# Copy to _data/implementations/<your-project>.yml (lowercase, dashes).
+name: Example Host
+url: https://example.com
+repo: https://github.com/example/example-host   # optional
+maintainer: Example Inc.
+license: Apache-2.0
+role: host            # host | client | relay | sdk
+use_case: Drive the coding agents on your server from any OAL client.
+connection: [relay, lan]   # any of: relay, lan
+e2e: false            # end-to-end encryption between client and host
+multi_device: true    # several devices on one agent, first answer wins
+conformance:
+  suite: "0.1"        # oal-conformance version you ran
+  passed: 2026-09-26  # date of the passing run
+  report: https://github.com/example/example-host/actions/runs/123   # full suite output

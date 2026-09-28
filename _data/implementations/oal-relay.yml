@@ -1,7 +1,7 @@
 name: oal-relay
 url: https://github.com/NeboLoop/nebo-link/tree/main/crates/oal-relay
 repo: https://github.com/NeboLoop/nebo-link
-maintainer: NeboLoop
+maintainer: NeboAI
 license: Apache-2.0
 role: relay
 use_case: Self-hosted relay in one binary or container. No accounts, and it never sees content.

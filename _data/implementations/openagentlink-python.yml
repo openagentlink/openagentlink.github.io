@@ -1,7 +1,7 @@
 name: openagentlink (Python)
 url: https://github.com/NeboLoop/nebo-link/tree/main/sdk/python
 repo: https://github.com/NeboLoop/nebo-link
-maintainer: NeboLoop
+maintainer: NeboAI
 license: Apache-2.0
 role: sdk
 use_case: Drive coding agents from Python scripts and services, with typed async events.

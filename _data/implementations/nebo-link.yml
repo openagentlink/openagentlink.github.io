@@ -1,7 +1,7 @@
 name: Nebo Link
 url: https://github.com/NeboLoop/nebo-link
 repo: https://github.com/NeboLoop/nebo-link
-maintainer: NeboLoop
+maintainer: NeboAI
 license: Apache-2.0
 role: host
 use_case: One host per computer for Claude Code, Codex, OpenClaw, Hermes and any ACP agent.
